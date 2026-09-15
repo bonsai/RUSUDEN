@@ -69,9 +69,10 @@ function bindKeypad() {
 function renderInbox() {
   currentCall = null
   voiceState = 'listen'
-  app.innerHTML = `<main class="voice-shell"><div class="presence"><span class="dot"></span></div>${mode === 'debug' ? `<section class="debug-ui"><p class="eyebrow">RUSUDEN / DTMF DEBUG</p><h1>数字で選ぶ</h1><p class="lead">1・2・3 のどれかを押してください。</p>${keypadMarkup()}</section>` : ''}${debugMarkup()}</main>`
+  app.innerHTML = `<main class="voice-shell"><div class="presence"><span class="dot"></span></div>${mode === 'debug' ? `<section class="debug-ui"><p class="eyebrow">RUSUDEN / DTMF DEBUG</p><h1>新しい録音が3件あります</h1><p class="lead">1・2・3 のどれかを押してください。</p>${keypadMarkup()}</section>` : ''}${debugMarkup()}</main>`
   bindKeypad()
   debugLog('inbox:ready')
+  setTimeout(() => speak('新しい録音が3件あります。1、2、3のどれかを押してください。'), 150)
 }
 
 function renderCall(call: Call) {
