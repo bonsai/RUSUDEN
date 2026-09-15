@@ -11,7 +11,6 @@ const calls: Call[] = [
   { id: 3, title: '知らない誰か', question: 'あなたなら、この問いにどう答えますか？', voice: '知らない誰か。あなたなら、この問いにどう答えますか？' },
 ]
 
-// The telephone board is part of the public product UI. Debug only adds diagnostics.
 const mode: Mode = new URLSearchParams(location.search).get('debug') === '1' ? 'debug' : 'normal'
 let voiceState: VoiceState = 'listen'
 let stage: Stage = 'inbox'
@@ -55,12 +54,15 @@ function callControlsMarkup() {
 }
 
 function keypadMarkup() {
-  return `<section class="board" aria-label="電話操作盤"><div class="keypad">${['1','2','3','4','5','6','7','8','9','*','0','#'].map(key => `<button type="button" data-key="${key}" aria-label="${key}">${key}</button>`).join('')}</div></section>`
+  const keys = ['1','2','3','4','5','6','7','8','9','*','0','#']
+  const serviceNumbers = ['1417', '1418']
+  return `<section class="board" aria-label="電話操作盤">
+    <div class="keypad">${keys.map(key => `<button type="button" data-key="${key}" aria-label="${key}">${key}</button>`).join('')}</div>
+    <div class="service-numbers" aria-label="サービス番号">${serviceNumbers.map(number => `<button type="button" data-number="${number}" aria-label="${number}">${number}</button>`).join('')}</div>
+  </section>`
 }
 
 function render(stageMarkup = '') {
-  // Public UI always contains the telephone board and call controls.
-  // ?debug=1 only adds diagnostics.
   app.innerHTML = `<main class="voice-shell">${callControlsMarkup()}${keypadMarkup()}${stageMarkup}</main>${debugMarkup()}`
   bindKeypad()
 }
@@ -78,6 +80,11 @@ function handleCallAction(action: string) {
     debugLog('call:hangup')
     renderInbox()
   }
+}
+
+function handleNumber(number: string) {
+  debugLog(`number:${number}`)
+  speak(`${number}番です。`)
 }
 
 function handleKey(key: string) {
@@ -119,6 +126,7 @@ function handleKey(key: string) {
 
 function bindKeypad() {
   document.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(button => button.addEventListener('click', () => handleKey(button.dataset.key!)))
+  document.querySelectorAll<HTMLButtonElement>('[data-number]').forEach(button => button.addEventListener('click', () => handleNumber(button.dataset.number!)))
   document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => button.addEventListener('click', () => handleCallAction(button.dataset.action!)))
   window.onkeydown = event => {
     if (/^[0-9*#]$/.test(event.key)) handleKey(event.key)
