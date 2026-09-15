@@ -47,14 +47,37 @@ function speak(text: string, onEnd?: () => void) {
   speechSynthesis.speak(utterance)
 }
 
+function callControlsMarkup() {
+  return `<section class="call-controls" aria-label="通話操作">
+    <button type="button" class="call-button call-button--start" data-action="call" aria-label="発信">●</button>
+    <button type="button" class="call-button call-button--hangup" data-action="hangup" aria-label="切る">■</button>
+  </section>`
+}
+
 function keypadMarkup() {
   return `<section class="board" aria-label="電話操作盤"><div class="keypad">${['1','2','3','4','5','6','7','8','9','*','0','#'].map(key => `<button type="button" data-key="${key}" aria-label="${key}">${key}</button>`).join('')}</div></section>`
 }
 
 function render(stageMarkup = '') {
-  // Public UI always contains the telephone board. ?debug=1 only adds diagnostics.
-  app.innerHTML = `<main class="voice-shell">${keypadMarkup()}${stageMarkup}</main>${debugMarkup()}`
+  // Public UI always contains the telephone board and call controls.
+  // ?debug=1 only adds diagnostics.
+  app.innerHTML = `<main class="voice-shell">${callControlsMarkup()}${keypadMarkup()}${stageMarkup}</main>${debugMarkup()}`
   bindKeypad()
+}
+
+function handleCallAction(action: string) {
+  if (action === 'call') {
+    debugLog('call:start')
+    if (stage === 'inbox') renderInbox()
+    return
+  }
+
+  if (action === 'hangup') {
+    speechSynthesis?.cancel()
+    voiceState = 'listen'
+    debugLog('call:hangup')
+    renderInbox()
+  }
 }
 
 function handleKey(key: string) {
@@ -96,6 +119,7 @@ function handleKey(key: string) {
 
 function bindKeypad() {
   document.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(button => button.addEventListener('click', () => handleKey(button.dataset.key!)))
+  document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => button.addEventListener('click', () => handleCallAction(button.dataset.action!)))
   window.onkeydown = event => {
     if (/^[0-9*#]$/.test(event.key)) handleKey(event.key)
   }
