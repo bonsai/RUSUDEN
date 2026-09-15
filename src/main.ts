@@ -17,6 +17,7 @@ let stage: Stage = 'inbox'
 let currentCall: Call | null = null
 let lastEvent = 'ready'
 let pressedNumber = ''
+let audioContext: AudioContext | null = null
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
@@ -29,6 +30,35 @@ function debugLog(event: string) {
   lastEvent = event
   const panel = document.querySelector('.debug-panel')
   if (panel) panel.outerHTML = debugMarkup()
+}
+
+function playPushTone(key: string) {
+  const frequencies: Record<string, [number, number]> = {
+    '1': [697, 1209], '2': [697, 1336], '3': [697, 1477],
+    '4': [770, 1209], '5': [770, 1336], '6': [770, 1477],
+    '7': [852, 1209], '8': [852, 1336], '9': [852, 1477],
+    '*': [941, 1209], '0': [941, 1336], '#': [941, 1477],
+  }
+  const pair = frequencies[key]
+  if (!pair) return
+  const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AudioCtx) return
+  audioContext ??= new AudioCtx()
+  if (audioContext.state === 'suspended') void audioContext.resume()
+  const now = audioContext.currentTime
+  const gain = audioContext.createGain()
+  gain.gain.setValueAtTime(0.0001, now)
+  gain.gain.exponentialRampToValueAtTime(0.16, now + 0.008)
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.095)
+  gain.connect(audioContext.destination)
+  pair.forEach(frequency => {
+    const oscillator = audioContext!.createOscillator()
+    oscillator.type = 'sine'
+    oscillator.frequency.value = frequency
+    oscillator.connect(gain)
+    oscillator.start(now)
+    oscillator.stop(now + 0.1)
+  })
 }
 
 function speak(text: string, onEnd?: () => void) {
@@ -85,6 +115,7 @@ function handleCallAction(action: string) {
 }
 
 function handleNumber(number: string) {
+  number.split('').forEach(playPushTone)
   pressedNumber = number
   debugLog(`number:${number}`)
   render()
@@ -92,6 +123,7 @@ function handleNumber(number: string) {
 }
 
 function handleKey(key: string) {
+  playPushTone(key)
   pressedNumber += key
   render()
   debugLog(`dtmf:${key}`)
