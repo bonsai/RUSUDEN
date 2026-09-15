@@ -16,6 +16,7 @@ let voiceState: VoiceState = 'listen'
 let stage: Stage = 'inbox'
 let currentCall: Call | null = null
 let lastEvent = 'ready'
+let pressedNumber = ''
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
@@ -57,6 +58,7 @@ function keypadMarkup() {
   const keys = ['1','2','3','4','5','6','7','8','9','*','0','#']
   const serviceNumbers = ['1417', '1418']
   return `<section class="board" aria-label="電話操作盤">
+    <div class="number-display" aria-live="polite" aria-label="現在押されている番号">${pressedNumber || '—'}</div>
     <div class="keypad">${keys.map(key => `<button type="button" data-key="${key}" aria-label="${key}">${key}</button>`).join('')}</div>
     <div class="service-numbers" aria-label="サービス番号">${serviceNumbers.map(number => `<button type="button" data-number="${number}" aria-label="${number}">${number}</button>`).join('')}</div>
   </section>`
@@ -83,15 +85,20 @@ function handleCallAction(action: string) {
 }
 
 function handleNumber(number: string) {
+  pressedNumber = number
   debugLog(`number:${number}`)
+  render()
   speak(`${number}番です。`)
 }
 
 function handleKey(key: string) {
+  pressedNumber += key
+  render()
   debugLog(`dtmf:${key}`)
 
   if (stage === 'inbox' && /^[1-3]$/.test(key)) {
     currentCall = calls[Number(key) - 1]
+    pressedNumber = key
     renderQuestion(currentCall)
     return
   }
@@ -137,6 +144,7 @@ function renderInbox() {
   stage = 'inbox'
   currentCall = null
   voiceState = 'listen'
+  pressedNumber = ''
   render()
   debugLog('inbox:ready')
   setTimeout(() => speak('新しい録音が3件あります。1、2、3のどれかを押してください。'), 150)
