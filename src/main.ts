@@ -11,7 +11,7 @@ const calls: Call[] = [
   { id: 3, title: '知らない誰か', question: 'あなたなら、この問いにどう答えますか？', voice: '知らない誰か。あなたなら、この問いにどう答えますか？' },
 ]
 
-const mode: Mode = new URLSearchParams(location.search).get('debug') === '1' ? 'debug' : 'normal'
+const mode: Mode = location.pathname.replace(/\/+$/, '').endsWith('/d') || new URLSearchParams(location.search).get('debug') === '1' ? 'debug' : 'normal'
 let voiceState: VoiceState = 'listen'
 let stage: Stage = 'inbox'
 let currentCall: Call | null = null
@@ -23,7 +23,7 @@ const app = document.querySelector<HTMLDivElement>('#app')!
 
 function debugMarkup() {
   if (mode !== 'debug') return ''
-  return `<aside class="debug-panel"><strong>DEBUG</strong><span>mode: ${mode}</span><span>stage: ${stage}</span><span>state: ${voiceState}</span><span>call: ${currentCall?.title ?? '-'}</span><span>event: ${lastEvent}</span></aside>`
+  return `<aside class="debug-panel"><strong>DEBUG</strong><span>mode: ${mode}</span><span>path: ${location.pathname}</span><span>stage: ${stage}</span><span>state: ${voiceState}</span><span>call: ${currentCall?.title ?? '-'}</span><span>event: ${lastEvent}</span><span>pressedNumber: ${pressedNumber || '-'}</span><span>online: ${navigator.onLine}</span><span>screen: ${innerWidth}×${innerHeight}</span><span>time: ${new Date().toISOString()}</span></aside>`
 }
 
 function debugLog(event: string) {
