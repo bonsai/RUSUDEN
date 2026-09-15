@@ -1,12 +1,6 @@
 import './style.css'
 
-type Call = {
-  id: number
-  title: string
-  message: string
-  voice: string
-}
-
+type Call = { id: number; title: string; message: string; voice: string }
 type Mode = 'normal' | 'debug'
 type VoiceState = 'listen' | 'speak'
 
@@ -19,173 +13,100 @@ const calls: Call[] = [
 const mode: Mode = new URLSearchParams(location.search).get('debug') === '1' ? 'debug' : 'normal'
 let voiceState: VoiceState = 'listen'
 let currentCall: Call | null = null
-let transcript = ''
 let lastEvent = 'ready'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
-function debugLog(event: string) {
-  lastEvent = event
-  const panel = document.querySelector<HTMLElement>('#debug-panel')
-  if (panel) panel.innerHTML = debugMarkup()
+function debugMarkup() {
+  if (mode !== 'debug') return ''
+  return `<aside class="debug-panel"><strong>DEBUG</strong><span>mode: ${mode}</span><span>state: ${voiceState}</span><span>call: ${currentCall?.title ?? '-'}</span><span>event: ${lastEvent}</span></aside>`
 }
 
-function debugMarkup() {
-  return `<aside id="debug-panel" class="debug-panel"><strong>DEBUG</strong><span>mode: ${mode}</span><span>state: ${voiceState}</span><span>call: ${currentCall?.title ?? '-'}</span><span>event: ${lastEvent}</span></aside>`
+function debugLog(event: string) {
+  lastEvent = event
+  const panel = document.querySelector('.debug-panel')
+  if (panel) panel.outerHTML = debugMarkup()
 }
 
 function speak(text: string) {
   voiceState = 'speak'
   debugLog('tts:start')
-  if (!('speechSynthesis' in window)) {
-    voiceState = 'listen'
-    debugLog('tts:unsupported')
-    return
-  }
+  if (!('speechSynthesis' in window)) return
   speechSynthesis.cancel()
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.lang = 'ja-JP'
   utterance.rate = 0.9
-  utterance.onend = () => {
-    voiceState = 'listen'
-    debugLog('tts:end')
-  }
+  utterance.onend = () => { voiceState = 'listen'; debugLog('tts:end') }
   speechSynthesis.speak(utterance)
 }
 
-function renderDebug() {
-  if (mode !== 'debug') return ''
-  return debugMarkup()
+function keypadMarkup() {
+  return `<div class="keypad">${['1','2','3','4','5','6','7','8','9','*','0','#'].map(key => `<button data-key="${key}">${key}</button>`).join('')}</div>`
+}
+
+function handleKey(key: string) {
+  debugLog(`dtmf:${key}`)
+  if (!currentCall && /^[1-3]$/.test(key)) {
+    currentCall = calls[Number(key) - 1]
+    renderCall(currentCall)
+    return
+  }
+  if (currentCall && key === '#') {
+    renderConversation(currentCall)
+    return
+  }
+  if (currentCall && key === '0') speak(currentCall.voice)
+  if (currentCall && key === '*') renderInbox()
+}
+
+function bindKeypad() {
+  document.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(button => button.addEventListener('click', () => handleKey(button.dataset.key!)))
+  window.onkeydown = event => {
+    if (/^[0-9*#]$/.test(event.key)) handleKey(event.key)
+  }
 }
 
 function renderInbox() {
   currentCall = null
   voiceState = 'listen'
-  app.innerHTML = `
-    <main class="voice-shell">
-      <div class="presence" aria-hidden="true"><span class="dot"></span></div>
-      ${renderDebug()}
-    </main>
-  `
+  app.innerHTML = `<main class="voice-shell"><div class="presence"><span class="dot"></span></div>${mode === 'debug' ? `<section class="debug-ui"><p class="eyebrow">RUSUDEN / DTMF DEBUG</p><h1>数字で選ぶ</h1><p class="lead">1・2・3 のどれかを押してください。</p>${keypadMarkup()}</section>` : ''}${debugMarkup()}</main>`
+  bindKeypad()
   debugLog('inbox:ready')
-  // Normal mode is intentionally voice-only. The POC still exposes the inbox
-  // through debug mode so the flow remains testable.
-  if (mode === 'debug') renderDebugInbox()
-  else {
-    speak('……もしもし。電話がいくつか届いています。どれに出ますか？')
-    // Voice selection is intentionally deferred to the next voice-input step.
-    // For the POC, a debug URL remains available for deterministic call selection.
-  }
-}
-
-function renderDebugInbox() {
-  app.innerHTML = `
-    <section class="debug-ui">
-      <p class="eyebrow">RUSUDEN / DEBUG</p>
-      <h1>着信一覧</h1>
-      <div class="calls">
-        ${calls.map(call => `
-          <button class="call" data-call="${call.id}">
-            <span class="dot"></span>
-            <span><strong>${call.title}</strong><small>${call.message}</small></span>
-            <span class="arrow">→</span>
-          </button>
-        `).join('')}
-      </div>
-      ${renderDebug()}
-    </section>
-  `
-  document.querySelectorAll<HTMLButtonElement>('[data-call]').forEach(button => {
-    button.addEventListener('click', () => {
-      currentCall = calls.find(call => call.id === Number(button.dataset.call)) ?? null
-      if (currentCall) renderCall(currentCall)
-    })
-  })
-  debugLog('inbox:debug')
 }
 
 function renderCall(call: Call) {
   voiceState = 'listen'
-  app.innerHTML = `
-    <main class="voice-shell">
-      <div class="presence" aria-hidden="true"><span class="pulse"></span></div>
-      ${mode === 'debug' ? `<section class="debug-ui"><p class="eyebrow">着信 ${String(call.id).padStart(2, '0')}</p><h1>${call.title}</h1><p class="message">${call.message}</p><div class="actions"><button id="listen" class="primary">電話に出る</button><button id="back" class="ghost">戻る</button></div></section>` : ''}
-      ${renderDebug()}
-    </main>
-  `
+  app.innerHTML = `<main class="voice-shell"><div class="presence"><span class="pulse"></span></div>${mode === 'debug' ? `<section class="debug-ui"><p class="eyebrow">着信 ${String(call.id).padStart(2, '0')}</p><h1>${call.title}</h1><p class="message">${call.message}</p><p class="hint"># 出る　0 もう一度　* 戻る</p>${keypadMarkup()}</section>` : ''}${debugMarkup()}</main>`
+  bindKeypad()
   debugLog('call:incoming')
   speak(call.voice)
-  document.querySelector('#listen')?.addEventListener('click', () => renderConversation(call))
-  document.querySelector('#back')?.addEventListener('click', renderInbox)
-
-  if (mode === 'normal') {
-    setTimeout(() => renderConversation(call), 2500)
-  }
 }
 
 function renderConversation(call: Call) {
   voiceState = 'listen'
-  app.innerHTML = `
-    <main class="voice-shell">
-      <div class="presence" aria-hidden="true"><span class="pulse"></span></div>
-      ${mode === 'debug' ? `<section class="debug-ui conversation"><p class="eyebrow">通話中</p><p class="message">${call.message}</p><p id="transcript" class="transcript">${transcript || 'あなたの番です。'}</p><div class="actions"><button id="talk" class="primary">話す</button><button id="replay" class="ghost">もう一度聴く</button></div><div class="question"><label for="question">自分から質問する</label><div class="row"><input id="question" placeholder="聞いてみる…" autocomplete="off" /><button id="ask" class="primary">送る</button></div></div><button id="hangup" class="end">電話を切る</button></section>` : ''}
-      ${renderDebug()}
-    </main>
-  `
+  app.innerHTML = `<main class="voice-shell"><div class="presence"><span class="pulse"></span></div>${mode === 'debug' ? `<section class="debug-ui"><p class="eyebrow">通話中</p><p class="message">${call.message}</p><p id="transcript" class="transcript">話すにはマイクを使います。</p><p class="hint">0 もう一度　* 電話を切る</p>${keypadMarkup()}</section>` : ''}${debugMarkup()}</main>`
+  bindKeypad()
   debugLog('call:connected')
-
-  if (mode === 'normal') {
-    speak('……まだいるよ。話して。')
-    startVoiceInput(call)
-    return
-  }
-
-  const question = document.querySelector<HTMLInputElement>('#question')!
-  const transcriptEl = document.querySelector<HTMLParagraphElement>('#transcript')!
-  document.querySelector('#replay')?.addEventListener('click', () => speak(call.voice))
-  document.querySelector('#hangup')?.addEventListener('click', renderInbox)
-  document.querySelector('#ask')?.addEventListener('click', () => ask(call, question.value, transcriptEl, question))
-  document.querySelector('#talk')?.addEventListener('click', () => startVoiceInput(call, transcriptEl))
+  speak('……まだいるよ。話して。')
+  startVoiceInput()
 }
 
-function ask(call: Call, text: string, transcriptEl?: HTMLElement | null, input?: HTMLInputElement) {
-  const value = text.trim()
-  if (!value) return
-  transcript = value
-  if (transcriptEl) transcriptEl.textContent = `「${value}」`
-  debugLog('input:question')
-  const reply = `うん。${value}って聞いてくれたんだね。もう少し話してみようか。`
-  setTimeout(() => {
-    if (transcriptEl) transcriptEl.textContent = reply
-    speak(reply)
-  }, 250)
-  if (input) input.value = ''
-}
-
-function startVoiceInput(call: Call, transcriptEl?: HTMLElement | null) {
+function startVoiceInput() {
   const SpeechRecognition = (window as typeof window & { webkitSpeechRecognition?: new () => any }).webkitSpeechRecognition
-  if (!SpeechRecognition) {
-    debugLog('asr:unsupported')
-    if (transcriptEl) transcriptEl.textContent = '音声入力に対応していません。'
-    return
-  }
-  voiceState = 'listen'
-  debugLog('asr:start')
+  if (!SpeechRecognition) { debugLog('asr:unsupported'); return }
   const recognition = new SpeechRecognition()
   recognition.lang = 'ja-JP'
   recognition.interimResults = false
   recognition.onresult = (event: any) => {
     const text = event.results[0][0].transcript as string
+    const transcript = document.querySelector('#transcript')
+    if (transcript) transcript.textContent = `「${text}」`
     debugLog('asr:result')
-    if (transcriptEl) transcriptEl.textContent = `「${text}」`
-    const reply = `うん。${text}。聞いてるよ。`
-    setTimeout(() => {
-      if (transcriptEl) transcriptEl.textContent = reply
-      speak(reply)
-    }, 250)
+    setTimeout(() => speak(`うん。${text}。聞いてるよ。`), 250)
   }
   recognition.onerror = () => debugLog('asr:error')
   recognition.start()
+  debugLog('asr:start')
 }
 
 renderInbox()
