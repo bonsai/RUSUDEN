@@ -1,17 +1,19 @@
 import './style.css'
 
-type Call = { id: number; title: string; message: string; voice: string }
+type Call = { id: number; title: string; question: string; voice: string }
 type Mode = 'normal' | 'debug'
 type VoiceState = 'listen' | 'speak'
+type Stage = 'inbox' | 'q' | 'reply' | 'answer'
 
 const calls: Call[] = [
-  { id: 1, title: '今日のあなたへ', message: '今日は、少しだけ立ち止まってみない？', voice: '今日のあなたへ。今日は、少しだけ立ち止まってみない？' },
-  { id: 2, title: '夜からの電話', message: '眠る前に、ひとつ聞いてほしいことがある。', voice: '夜からの電話。眠る前に、ひとつ聞いてほしいことがある。' },
-  { id: 3, title: '知らない誰か', message: 'あなたに、まだ答えていない質問があります。', voice: '知らない誰か。あなたに、まだ答えていない質問があります。' },
+  { id: 1, title: '今日のあなたへ', question: '今日は、少しだけ立ち止まってみない？', voice: '今日のあなたへ。今日は、少しだけ立ち止まってみない？' },
+  { id: 2, title: '夜からの電話', question: '眠る前に、ひとつ聞いてほしいことはありますか？', voice: '夜からの電話。眠る前に、ひとつ聞いてほしいことはありますか？' },
+  { id: 3, title: '知らない誰か', question: 'あなたなら、この問いにどう答えますか？', voice: '知らない誰か。あなたなら、この問いにどう答えますか？' },
 ]
 
 const mode: Mode = new URLSearchParams(location.search).get('debug') === '1' ? 'debug' : 'normal'
 let voiceState: VoiceState = 'listen'
+let stage: Stage = 'inbox'
 let currentCall: Call | null = null
 let lastEvent = 'ready'
 
@@ -19,7 +21,7 @@ const app = document.querySelector<HTMLDivElement>('#app')!
 
 function debugMarkup() {
   if (mode !== 'debug') return ''
-  return `<aside class="debug-panel"><strong>DEBUG</strong><span>mode: ${mode}</span><span>state: ${voiceState}</span><span>call: ${currentCall?.title ?? '-'}</span><span>event: ${lastEvent}</span></aside>`
+  return `<aside class="debug-panel"><strong>DEBUG</strong><span>mode: ${mode}</span><span>stage: ${stage}</span><span>state: ${voiceState}</span><span>call: ${currentCall?.title ?? '-'}</span><span>event: ${lastEvent}</span></aside>`
 }
 
 function debugLog(event: string) {
@@ -28,15 +30,19 @@ function debugLog(event: string) {
   if (panel) panel.outerHTML = debugMarkup()
 }
 
-function speak(text: string) {
+function speak(text: string, onEnd?: () => void) {
   voiceState = 'speak'
   debugLog('tts:start')
-  if (!('speechSynthesis' in window)) return
+  if (!('speechSynthesis' in window)) {
+    voiceState = 'listen'
+    onEnd?.()
+    return
+  }
   speechSynthesis.cancel()
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.lang = 'ja-JP'
   utterance.rate = 0.9
-  utterance.onend = () => { voiceState = 'listen'; debugLog('tts:end') }
+  utterance.onend = () => { voiceState = 'listen'; debugLog('tts:end'); onEnd?.() }
   speechSynthesis.speak(utterance)
 }
 
@@ -44,19 +50,41 @@ function keypadMarkup() {
   return `<section class="board" aria-label="電話操作盤"><div class="keypad">${['1','2','3','4','5','6','7','8','9','*','0','#'].map(key => `<button type="button" data-key="${key}" aria-label="${key}">${key}</button>`).join('')}</div></section>`
 }
 
+function render(stageMarkup: string) {
+  app.innerHTML = `<main class="voice-shell">${mode === 'debug' ? keypadMarkup() : '<div class="presence"><span class="dot"></span>'}${stageMarkup}</main>${debugMarkup()}`
+  bindKeypad()
+}
+
 function handleKey(key: string) {
   debugLog(`dtmf:${key}`)
-  if (!currentCall && /^[1-3]$/.test(key)) {
+
+  if (stage === 'inbox' && /^[1-3]$/.test(key)) {
     currentCall = calls[Number(key) - 1]
-    renderCall(currentCall)
+    renderQuestion(currentCall)
     return
   }
-  if (currentCall && key === '#') {
-    renderConversation(currentCall)
+
+  if (stage === 'q' && key === '0' && currentCall) {
+    speak(currentCall.voice)
     return
   }
-  if (currentCall && key === '0') speak(currentCall.voice)
-  if (currentCall && key === '*') renderInbox()
+
+  if (stage === 'q' && key === '#') {
+    renderReplyPrompt()
+    return
+  }
+
+  if ((stage === 'q' || stage === 'reply') && key === '*') {
+    renderInbox()
+    return
+  }
+
+  if (stage === 'reply' && key === '0' && currentCall) {
+    renderQuestion(currentCall)
+    return
+  }
+
+  if (stage === 'answer' && key === '*') renderInbox()
 }
 
 function bindKeypad() {
@@ -67,28 +95,36 @@ function bindKeypad() {
 }
 
 function renderInbox() {
+  stage = 'inbox'
   currentCall = null
   voiceState = 'listen'
-  app.innerHTML = `<main class="voice-shell">${mode === 'debug' ? keypadMarkup() : '<div class="presence"><span class="dot"></span></div>'}${debugMarkup()}</main>`
-  bindKeypad()
+  render('')
   debugLog('inbox:ready')
   setTimeout(() => speak('新しい録音が3件あります。1、2、3のどれかを押してください。'), 150)
 }
 
-function renderCall(call: Call) {
+function renderQuestion(call: Call) {
+  stage = 'q'
   voiceState = 'listen'
-  app.innerHTML = `<main class="voice-shell">${mode === 'debug' ? keypadMarkup() : '<div class="presence"><span class="pulse"></span></div>'}${debugMarkup()}</main>`
-  bindKeypad()
-  debugLog('call:incoming')
-  speak(call.voice)
+  render('')
+  debugLog('q:play')
+  speak(call.voice, renderReplyPrompt)
 }
 
-function renderConversation(call: Call) {
+function renderReplyPrompt() {
+  stage = 'reply'
   voiceState = 'listen'
-  app.innerHTML = `<main class="voice-shell">${mode === 'debug' ? keypadMarkup() : '<div class="presence"><span class="pulse"></span></div>'}${debugMarkup()}</main>`
-  bindKeypad()
-  debugLog('call:connected')
-  speak('……まだいるよ。話して。')
+  render('')
+  debugLog('q:reply-prompt')
+  speak('この録音に返信しますか？')
+}
+
+function renderAnswer() {
+  stage = 'answer'
+  voiceState = 'listen'
+  render('')
+  debugLog('a:listen')
+  speak('どうぞ。答えだけ吹き込んでください。')
   startVoiceInput()
 }
 
@@ -100,12 +136,23 @@ function startVoiceInput() {
   recognition.interimResults = false
   recognition.onresult = (event: any) => {
     const text = event.results[0][0].transcript as string
-    debugLog(`asr:result:${text}`)
-    setTimeout(() => speak(`うん。${text}。聞いてるよ。`), 250)
+    debugLog(`a:recorded:${text}`)
+    speak('ありがとうございました。', renderInbox)
   }
   recognition.onerror = () => debugLog('asr:error')
+  recognition.onend = () => debugLog('asr:end')
   recognition.start()
   debugLog('asr:start')
+}
+
+const originalHandleKey = handleKey
+handleKey = (key: string) => {
+  if (stage === 'reply' && key === '#') {
+    debugLog('dtmf:#')
+    renderAnswer()
+    return
+  }
+  originalHandleKey(key)
 }
 
 renderInbox()
