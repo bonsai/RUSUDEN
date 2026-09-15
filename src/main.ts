@@ -50,8 +50,9 @@ function keypadMarkup() {
   return `<section class="board" aria-label="電話操作盤"><div class="keypad">${['1','2','3','4','5','6','7','8','9','*','0','#'].map(key => `<button type="button" data-key="${key}" aria-label="${key}">${key}</button>`).join('')}</div></section>`
 }
 
-function render(stageMarkup: string) {
-  app.innerHTML = `<main class="voice-shell">${mode === 'debug' ? keypadMarkup() : '<div class="presence"><span class="dot"></span>'}${stageMarkup}</main>${debugMarkup()}`
+function render(stageMarkup = '') {
+  const presence = mode === 'debug' ? keypadMarkup() : '<div class="presence"><span class="dot"></span></div>'
+  app.innerHTML = `<main class="voice-shell">${presence}${stageMarkup}</main>${debugMarkup()}`
   bindKeypad()
 }
 
@@ -71,6 +72,11 @@ function handleKey(key: string) {
 
   if (stage === 'q' && key === '#') {
     renderReplyPrompt()
+    return
+  }
+
+  if (stage === 'reply' && key === '#') {
+    renderAnswer()
     return
   }
 
@@ -98,7 +104,7 @@ function renderInbox() {
   stage = 'inbox'
   currentCall = null
   voiceState = 'listen'
-  render('')
+  render()
   debugLog('inbox:ready')
   setTimeout(() => speak('新しい録音が3件あります。1、2、3のどれかを押してください。'), 150)
 }
@@ -106,7 +112,7 @@ function renderInbox() {
 function renderQuestion(call: Call) {
   stage = 'q'
   voiceState = 'listen'
-  render('')
+  render()
   debugLog('q:play')
   speak(call.voice, renderReplyPrompt)
 }
@@ -114,7 +120,7 @@ function renderQuestion(call: Call) {
 function renderReplyPrompt() {
   stage = 'reply'
   voiceState = 'listen'
-  render('')
+  render()
   debugLog('q:reply-prompt')
   speak('この録音に返信しますか？')
 }
@@ -122,7 +128,7 @@ function renderReplyPrompt() {
 function renderAnswer() {
   stage = 'answer'
   voiceState = 'listen'
-  render('')
+  render()
   debugLog('a:listen')
   speak('どうぞ。答えだけ吹き込んでください。')
   startVoiceInput()
@@ -143,16 +149,6 @@ function startVoiceInput() {
   recognition.onend = () => debugLog('asr:end')
   recognition.start()
   debugLog('asr:start')
-}
-
-const originalHandleKey = handleKey
-handleKey = (key: string) => {
-  if (stage === 'reply' && key === '#') {
-    debugLog('dtmf:#')
-    renderAnswer()
-    return
-  }
-  originalHandleKey(key)
 }
 
 renderInbox()
