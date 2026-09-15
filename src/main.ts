@@ -11,6 +11,7 @@ const calls: Call[] = [
   { id: 3, title: '知らない誰か', question: 'あなたなら、この問いにどう答えますか？', voice: '知らない誰か。あなたなら、この問いにどう答えますか？' },
 ]
 
+// The telephone board is part of the public product UI. Debug only adds diagnostics.
 const mode: Mode = new URLSearchParams(location.search).get('debug') === '1' ? 'debug' : 'normal'
 let voiceState: VoiceState = 'listen'
 let stage: Stage = 'inbox'
@@ -51,8 +52,8 @@ function keypadMarkup() {
 }
 
 function render(stageMarkup = '') {
-  const presence = mode === 'debug' ? keypadMarkup() : '<div class="presence"><span class="dot"></span></div>'
-  app.innerHTML = `<main class="voice-shell">${presence}${stageMarkup}</main>${debugMarkup()}`
+  // Public UI always contains the telephone board. ?debug=1 only adds diagnostics.
+  app.innerHTML = `<main class="voice-shell">${keypadMarkup()}${stageMarkup}</main>${debugMarkup()}`
   bindKeypad()
 }
 
