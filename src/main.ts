@@ -41,7 +41,7 @@ function speak(text: string) {
 }
 
 function keypadMarkup() {
-  return `<div class="keypad">${['1','2','3','4','5','6','7','8','9','*','0','#'].map(key => `<button data-key="${key}">${key}</button>`).join('')}</div>`
+  return `<section class="board" aria-label="電話操作盤"><div class="keypad">${['1','2','3','4','5','6','7','8','9','*','0','#'].map(key => `<button type="button" data-key="${key}" aria-label="${key}">${key}</button>`).join('')}</div></section>`
 }
 
 function handleKey(key: string) {
@@ -69,7 +69,7 @@ function bindKeypad() {
 function renderInbox() {
   currentCall = null
   voiceState = 'listen'
-  app.innerHTML = `<main class="voice-shell"><div class="presence"><span class="dot"></span></div>${mode === 'debug' ? `<section class="debug-ui"><p class="eyebrow">RUSUDEN / DTMF DEBUG</p><h1>新しい録音が3件あります</h1><p class="lead">1・2・3 のどれかを押してください。</p>${keypadMarkup()}</section>` : ''}${debugMarkup()}</main>`
+  app.innerHTML = `<main class="voice-shell">${mode === 'debug' ? keypadMarkup() : '<div class="presence"><span class="dot"></span></div>'}${debugMarkup()}</main>`
   bindKeypad()
   debugLog('inbox:ready')
   setTimeout(() => speak('新しい録音が3件あります。1、2、3のどれかを押してください。'), 150)
@@ -77,7 +77,7 @@ function renderInbox() {
 
 function renderCall(call: Call) {
   voiceState = 'listen'
-  app.innerHTML = `<main class="voice-shell"><div class="presence"><span class="pulse"></span></div>${mode === 'debug' ? `<section class="debug-ui"><p class="eyebrow">着信 ${String(call.id).padStart(2, '0')}</p><h1>${call.title}</h1><p class="message">${call.message}</p><p class="hint"># 出る　0 もう一度　* 戻る</p>${keypadMarkup()}</section>` : ''}${debugMarkup()}</main>`
+  app.innerHTML = `<main class="voice-shell">${mode === 'debug' ? keypadMarkup() : '<div class="presence"><span class="pulse"></span></div>'}${debugMarkup()}</main>`
   bindKeypad()
   debugLog('call:incoming')
   speak(call.voice)
@@ -85,7 +85,7 @@ function renderCall(call: Call) {
 
 function renderConversation(call: Call) {
   voiceState = 'listen'
-  app.innerHTML = `<main class="voice-shell"><div class="presence"><span class="pulse"></span></div>${mode === 'debug' ? `<section class="debug-ui"><p class="eyebrow">通話中</p><p class="message">${call.message}</p><p id="transcript" class="transcript">話すにはマイクを使います。</p><p class="hint">0 もう一度　* 電話を切る</p>${keypadMarkup()}</section>` : ''}${debugMarkup()}</main>`
+  app.innerHTML = `<main class="voice-shell">${mode === 'debug' ? keypadMarkup() : '<div class="presence"><span class="pulse"></span></div>'}${debugMarkup()}</main>`
   bindKeypad()
   debugLog('call:connected')
   speak('……まだいるよ。話して。')
@@ -100,9 +100,7 @@ function startVoiceInput() {
   recognition.interimResults = false
   recognition.onresult = (event: any) => {
     const text = event.results[0][0].transcript as string
-    const transcript = document.querySelector('#transcript')
-    if (transcript) transcript.textContent = `「${text}」`
-    debugLog('asr:result')
+    debugLog(`asr:result:${text}`)
     setTimeout(() => speak(`うん。${text}。聞いてるよ。`), 250)
   }
   recognition.onerror = () => debugLog('asr:error')
